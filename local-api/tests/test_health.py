@@ -13,4 +13,5 @@ def test_health_reports_desktop_local_api_identity():
         "status": "ok",
         "service": "x2-local-api",
         "mode": "windows-desktop",
+        "role": "business",
     }

@@ -1,14 +1,21 @@
 # X2 AimDK 1.0 Robot Adapter
 
-This document explains how the platform switches from the local mock executor to the formal AimDK 1.0 ROS 2 executor.
+This document explains how the platform uses the X2 PC2 robot gateway to switch from local mock execution to the formal AimDK 1.0 ROS 2 executor.
 
 ## Runtime Modes
 
-The local API uses `X2_ROBOT_ADAPTER` at command time:
+The Windows business API chooses where robot commands execute with `X2_ROBOT_GATEWAY_URL`:
 
 ```powershell
-$env:X2_ROBOT_ADAPTER = "mock"   # default, no robot required
-$env:X2_ROBOT_ADAPTER = "aimdk"  # formal AimDK ROS 2 adapter
+$env:X2_ROBOT_GATEWAY_URL = ""                         # local mock development
+$env:X2_ROBOT_GATEWAY_URL = "http://<x2-pc2-ip>:8766"  # production PC2 gateway
+```
+
+The X2 PC2 robot gateway uses `X2_ROBOT_ADAPTER` at command time:
+
+```powershell
+export X2_ROBOT_ADAPTER=mock    # gateway smoke test, no robot required
+export X2_ROBOT_ADAPTER=aimdk   # formal AimDK ROS 2 adapter
 ```
 
 Check the selected adapter:
@@ -21,7 +28,7 @@ In `aimdk` mode, the API fails closed. If `rclpy` or `aimdk_msgs` is not availab
 
 ## Where AimDK Mode Runs
 
-AimDK mode must run inside an X2 AimDK ROS 2 environment, not a plain Windows Python shell.
+AimDK mode must run on the X2 Development Computing Unit (PC2) inside the X2 AimDK ROS 2 environment, not in a plain Windows Python shell. Do not deploy secondary development programs on the Motion Control Computing Unit (PC1).
 
 Expected runtime:
 
@@ -29,17 +36,19 @@ Expected runtime:
 source /opt/ros/humble/setup.bash
 source <aimdk-workspace>/install/setup.bash
 export X2_ROBOT_ADAPTER=aimdk
-uvicorn app.main:app --host 0.0.0.0 --port 8765
+./scripts/start-robot-gateway.sh
 ```
 
 AimDK 1.0 says SDK packages and URDF files are currently obtained or updated through after-sales technical support. Keep platform files outside `$HOME/aimdk*`, because that path is system-maintained and firmware operations can move or erase user data.
 
-If the Windows desktop app talks to an API running on the robot or a development compute unit, build the desktop app with:
+The Windows business API then forwards commands to PC2:
 
 ```powershell
-$env:VITE_LOCAL_API_URL = "http://<aimdk-api-host>:8765"
-.\scripts\build-windows-app.ps1
+$env:X2_ROBOT_GATEWAY_URL = "http://<x2-pc2-ip>:8766"
+.\scripts\start-local-api.ps1
 ```
+
+Audio/video/screen assets referenced by AimDK paths must be stored where the interaction services can read them. In the X2 SDK documentation, that means the Interaction Computing Unit (PC3), not PC2.
 
 ## Action Mapping
 
@@ -58,13 +67,26 @@ Preset motion ids currently built into the adapter include `wave`, `right_hand_w
 
 ## Environment Variables
 
+Windows business API:
+
 ```text
+X2_API_ROLE=business
+X2_ROBOT_GATEWAY_URL=http://<x2-pc2-ip>:8766
+X2_ROBOT_GATEWAY_TIMEOUT_SECONDS=5.0
+```
+
+X2 PC2 robot gateway:
+
+```text
+X2_API_ROLE=robot-gateway
 X2_ROBOT_ADAPTER=aimdk
 X2_AIMDK_INPUT_SOURCE=x2_rental_platform
 X2_AIMDK_INPUT_SOURCE_PRIORITY=40
 X2_AIMDK_INPUT_SOURCE_TIMEOUT_MS=1000
 X2_AIMDK_SERVICE_TIMEOUT_SECONDS=5.0
 X2_AIMDK_AUTO_REGISTER_INPUT_SOURCE=true
+X2_ROBOT_GATEWAY_HOST=0.0.0.0
+X2_ROBOT_GATEWAY_PORT=8766
 ```
 
 The default input source priority is `40`, matching AimDK's mid-level/custom control range guidance. Increase it only when the operator workflow intentionally needs to override lower-priority sources.

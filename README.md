@@ -8,14 +8,10 @@ The first product shape is a Windows desktop app, not a browser-first web app.
 
 ```text
 Windows Desktop App
-↓
-Local Python API
-↓
-Scenario Engine / Safety Controller
-↓
-Robot Adapter
-↓
-X2 AimDK / ROS2
+-> Windows Business API
+-> X2 PC2 Robot Gateway
+-> X2 AimDK / ROS2
+-> X2 PC3 media resources when audio/video/screen actions need files
 ```
 
 The desktop app contains two modes:
@@ -36,8 +32,12 @@ windows-app/
 - Tauri metadata lives in windows-app/src-tauri.
 
 local-api/
-- FastAPI local service called by the desktop app.
-- Starts as the local orchestration entrypoint.
+- FastAPI service with two roles:
+  - Windows business API.
+  - X2 PC2 robot gateway.
+
+scripts/
+- Windows and Ubuntu start scripts for business API, desktop dev, Tauri build, and PC2 robot gateway.
 
 docs/superpowers/plans/
 - Implementation plans for agentic development.
@@ -49,7 +49,7 @@ sdk/
 - X2 AimDK SDK archive tracked with Git LFS for Ubuntu / ROS 2 continuation.
 ```
 
-## Local API
+## Windows Business API
 
 Create and use a virtual environment:
 
@@ -65,9 +65,16 @@ Run tests:
 .\.venv\Scripts\python -m pytest local-api\tests -q
 ```
 
-Start the local API:
+Start the Windows business API with local mock robot execution:
 
 ```powershell
+.\scripts\start-local-api.ps1
+```
+
+For the production split where Windows keeps the business system and X2 PC2 runs AimDK, point the Windows business API at the PC2 robot gateway:
+
+```powershell
+$env:X2_ROBOT_GATEWAY_URL = "http://<x2-pc2-ip>:8766"
 .\scripts\start-local-api.ps1
 ```
 
@@ -77,27 +84,43 @@ Health check:
 http://127.0.0.1:8765/health
 ```
 
-Robot adapter status:
+Robot adapter / gateway status:
 
 ```text
 http://127.0.0.1:8765/robot-adapter/status
 ```
 
-## Robot Adapter Modes
+## X2 PC2 Robot Gateway
 
-The API defaults to a mock robot adapter for local development:
+Run the robot gateway on X2 PC2 inside the X2 AimDK ROS 2 environment:
 
-```powershell
-$env:X2_ROBOT_ADAPTER = "mock"
+```bash
+source /opt/ros/humble/setup.bash
+source <aimdk-workspace>/install/setup.bash
+export X2_ROBOT_ADAPTER=aimdk
+./scripts/start-robot-gateway.sh
 ```
 
-To use the formal AimDK 1.0 ROS 2 adapter, run the API inside the X2 AimDK ROS 2 environment and set:
-
-```powershell
-$env:X2_ROBOT_ADAPTER = "aimdk"
-```
+The gateway listens on `0.0.0.0:8766` by default and exposes only robot endpoints, not business endpoints.
 
 If `rclpy` or `aimdk_msgs` is missing, robot commands return HTTP `503` with `aimdk_runtime_unavailable`; they are not silently marked as executed. Full mapping and deployment notes are in `docs/x2-aimdk-adapter.md`.
+
+Recommended deployment:
+
+```text
+Windows
+- Desktop UI
+- Business API, scenario engine, licensing, logs
+- X2_ROBOT_GATEWAY_URL=http://<x2-pc2-ip>:8766
+
+X2 PC2
+- Robot gateway
+- X2_ROBOT_ADAPTER=aimdk
+- ROS 2 / AimDK command calls
+
+X2 PC3
+- Audio/video/screen resources referenced by AimDK paths
+```
 
 ## SDK Archive
 
@@ -136,10 +159,10 @@ cd windows-app
 npm run build
 ```
 
-If the local API is running on an AimDK host instead of this Windows machine, build with:
+If the Windows business API is not running on the same machine as the desktop app, build with:
 
 ```powershell
-$env:VITE_LOCAL_API_URL = "http://<aimdk-api-host>:8765"
+$env:VITE_LOCAL_API_URL = "http://<windows-business-api-host>:8765"
 .\scripts\build-windows-app.ps1
 ```
 

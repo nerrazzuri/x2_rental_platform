@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .robot_adapters import RobotAdapterCommandError, RobotAdapterUnavailable, get_robot_adapter
+from .robot_adapters import RobotAdapterCommandError, RobotAdapterUnavailable
+from .robot_gateway_client import get_robot_executor
+from .robot_models import RobotCommandCreate, SafetyRobotRequest
 from .templates import SCENARIO_TEMPLATES, build_steps, get_template
 
 router = APIRouter()
@@ -85,16 +87,6 @@ class ScenarioPublish(BaseModel):
 class RunCreate(BaseModel):
     event_id: str
     scenario_id: str
-    robot_id: str
-
-
-class RobotCommandCreate(BaseModel):
-    action_type: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    priority: int = 5
-
-
-class SafetyRobotRequest(BaseModel):
     robot_id: str
 
 
@@ -195,13 +187,11 @@ def execute_robot_command(robot_id: str, command: RobotCommandCreate, event_id: 
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="emergency_stop_active")
 
     command_id = state.next_id("command")
-    adapter = get_robot_adapter()
+    executor = get_robot_executor()
     try:
-        adapter_receipt = adapter.execute(
+        adapter_receipt = executor.execute(
             robot_id=robot_id,
-            action_type=command.action_type,
-            payload=command.payload,
-            priority=command.priority,
+            command=command,
             trace_id=command_id,
         )
     except RobotAdapterUnavailable as exc:
@@ -220,7 +210,8 @@ def execute_robot_command(robot_id: str, command: RobotCommandCreate, event_id: 
     }
     state.commands[command_id] = receipt
     get_robot_status(robot_id)["current_action"] = command.action_type
-    add_log(event_id, "robot_command", f"Executed {command.action_type} via {adapter.mode}", receipt)
+    location = receipt.get("execution_location", "local")
+    add_log(event_id, "robot_command", f"Executed {command.action_type} via {location}", receipt)
     return receipt
 
 
@@ -476,7 +467,10 @@ def robot_command(robot_id: str, payload: RobotCommandCreate):
 
 @router.get("/robot-adapter/status")
 def robot_adapter_status():
-    return get_robot_adapter().status()
+    try:
+        return get_robot_executor().status()
+    except RobotAdapterUnavailable as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=exc.detail) from exc
 
 
 @router.post("/safety/emergency-stop")
