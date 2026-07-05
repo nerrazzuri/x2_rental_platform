@@ -1,0 +1,13 @@
+.venv/
+.tmp/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+target/
+
+*.log

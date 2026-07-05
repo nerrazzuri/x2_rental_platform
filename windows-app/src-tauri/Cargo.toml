@@ -1,0 +1,12 @@
+[package]
+name = "x2-rental-windows-app"
+version = "0.1.0"
+description = "Windows desktop shell for the X2 rental scenario platform"
+authors = ["X2 Rental Platform"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
